@@ -5,10 +5,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_executable(mesh_info_cli
-    src/BoundingBox.cpp
-    src/Mesh.cpp
-    src/STLLoader.cpp
-    src/main.cpp
+    src/core/math/AABB.cpp
+    src/geometry/Mesh.cpp
+    src/analysis/MeshAnalyzer.cpp
+    src/io/STLLoader.cpp
+    src/wasm/WasmExports.cpp
+    cli/main.cpp
 )
 
 target_include_directories(mesh_info_cli PRIVATE include)

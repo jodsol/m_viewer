@@ -1,7 +1,10 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-import type { MeshData } from "./parsers";
+import type { GeometryDocument } from "../models/geometry";
+import { createDefaultModeControllers } from "../modes/createDefaultModeControllers";
+import type { ModeController } from "../modes/ModeController";
+import type { MeasurementInfo, PickInfo, ViewerInteractionMode } from "../types/viewer";
 
 export class MeshViewer {
   private readonly canvas: HTMLCanvasElement;
@@ -14,14 +17,23 @@ export class MeshViewer {
   private readonly material: THREE.MeshStandardMaterial;
   private readonly modelGroup: THREE.Group;
   private readonly handleResizeBound: () => void;
+  private readonly modeControllers: Map<ViewerInteractionMode, ModeController>;
 
   private mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial> | null = null;
   private boundsHelper: THREE.BoxHelper | null = null;
   private animationFrame: number | null = null;
+  private interactionMode: ViewerInteractionMode = "inspect";
 
-  constructor(canvas: HTMLCanvasElement, onStatusChange: (message: string) => void = () => {}) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    callbacks: {
+      onStatusChange?: (message: string) => void;
+      onPickChange?: (pickInfo: PickInfo | null) => void;
+      onMeasurementChange?: (measurementInfo: MeasurementInfo | null) => void;
+    } = {}
+  ) {
     this.canvas = canvas;
-    this.onStatusChange = onStatusChange;
+    this.onStatusChange = callbacks.onStatusChange ?? (() => {});
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color("#f0ece2");
 
@@ -45,12 +57,22 @@ export class MeshViewer {
     });
 
     this.modelGroup = new THREE.Group();
+    this.modeControllers = new Map(
+      createDefaultModeControllers({
+        camera: this.camera,
+        canvas: this.canvas,
+        scene: this.scene,
+        onPickChange: callbacks.onPickChange ?? (() => {}),
+        onMeasurementChange: callbacks.onMeasurementChange ?? (() => {})
+      }).map((controller) => [controller.id, controller])
+    );
 
     this.addSceneHelpers();
     this.scene.add(this.modelGroup);
     this.handleResize();
     this.handleResizeBound = () => this.handleResize();
     window.addEventListener("resize", this.handleResizeBound);
+    this.activateMode(this.interactionMode, false);
     this.animate();
   }
 
@@ -80,6 +102,47 @@ export class MeshViewer {
     this.renderer.setSize(width, height, false);
   }
 
+  private getModeController(mode: ViewerInteractionMode): ModeController {
+    const controller = this.modeControllers.get(mode);
+    if (!controller) {
+      throw new Error(`등록되지 않은 모드입니다: ${mode}`);
+    }
+    return controller;
+  }
+
+  private activateMode(mode: ViewerInteractionMode, updateStatus: boolean): void {
+    for (const controller of this.modeControllers.values()) {
+      if (controller.id === mode) {
+        controller.enter();
+      } else {
+        controller.exit();
+      }
+    }
+
+    if (updateStatus) {
+      this.onStatusChange(this.getModeController(mode).statusMessage);
+    }
+  }
+
+  private updateModeMeshes(): void {
+    for (const controller of this.modeControllers.values()) {
+      controller.setMesh(this.mesh);
+    }
+  }
+
+  setInteractionMode(mode: ViewerInteractionMode): void {
+    this.interactionMode = mode;
+    this.activateMode(mode, true);
+  }
+
+  getInteractionMode(): ViewerInteractionMode {
+    return this.interactionMode;
+  }
+
+  getAvailableModes(): ViewerInteractionMode[] {
+    return [...this.modeControllers.keys()];
+  }
+
   setWireframe(enabled: boolean): void {
     this.material.wireframe = enabled;
   }
@@ -94,7 +157,12 @@ export class MeshViewer {
     this.clipPlane.constant = value;
   }
 
-  loadMesh(meshData: MeshData): void {
+  loadDocument(document: GeometryDocument): void {
+    const primaryMesh = document.meshes[0];
+    if (!primaryMesh) {
+      throw new Error("렌더링할 메시가 없습니다.");
+    }
+
     if (this.mesh) {
       this.mesh.geometry.dispose();
       this.modelGroup.remove(this.mesh);
@@ -111,7 +179,7 @@ export class MeshViewer {
     }
 
     const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.Float32BufferAttribute(meshData.positions, 3));
+    geometry.setAttribute("position", new THREE.BufferAttribute(primaryMesh.positions, 3));
     geometry.computeVertexNormals();
     geometry.computeBoundingBox();
     geometry.center();
@@ -119,6 +187,7 @@ export class MeshViewer {
 
     this.mesh = new THREE.Mesh(geometry, this.material);
     this.modelGroup.add(this.mesh);
+    this.updateModeMeshes();
 
     this.boundsHelper = new THREE.BoxHelper(this.mesh, "#0b6e4f");
     this.modelGroup.add(this.boundsHelper);
@@ -132,8 +201,8 @@ export class MeshViewer {
     this.controls.target.set(0, 0, 0);
     this.controls.update();
     this.handleResize();
-
-    this.onStatusChange(`${meshData.format} 메쉬를 렌더링했습니다.`);
+    this.activateMode(this.interactionMode, false);
+    this.onStatusChange(`${document.format} 메시를 렌더링했습니다.`);
   }
 
   private animate(): void {
@@ -148,6 +217,9 @@ export class MeshViewer {
     }
 
     window.removeEventListener("resize", this.handleResizeBound);
+    for (const controller of this.modeControllers.values()) {
+      controller.dispose();
+    }
     this.controls.dispose();
     this.material.dispose();
     this.renderer.dispose();

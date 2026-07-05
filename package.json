@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "vite --config web-viewer/vite.config.mts",
+    "dev": "node scripts/dev.cjs",
+    "dev:web": "vite --config web-viewer/vite.config.mts",
     "build": "vite build --config web-viewer/vite.config.mts",
     "preview": "vite preview --config web-viewer/vite.config.mts"
   },

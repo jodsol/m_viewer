@@ -1,20 +1,4 @@
-export interface Bounds {
-  minX: number;
-  minY: number;
-  minZ: number;
-  maxX: number;
-  maxY: number;
-  maxZ: number;
-}
-
-export interface MeshData {
-  format: "STL" | "OBJ";
-  positions: number[];
-  vertexCount: number;
-  triangleCount: number;
-  bounds: Bounds;
-  boundsText: string;
-}
+import type { Bounds, GeometryDocument, GeometryFormat, GeometryMesh } from "../models/geometry";
 
 function makeBounds(): Bounds {
   return {
@@ -36,22 +20,29 @@ function expandBounds(bounds: Bounds, x: number, y: number, z: number): void {
   bounds.maxZ = Math.max(bounds.maxZ, z);
 }
 
-function formatBounds(bounds: Bounds): string {
-  return `(${bounds.minX.toFixed(2)}, ${bounds.minY.toFixed(2)}, ${bounds.minZ.toFixed(2)}) ~ (${bounds.maxX.toFixed(2)}, ${bounds.maxY.toFixed(2)}, ${bounds.maxZ.toFixed(2)})`;
-}
-
-function makeMeshResult(format: MeshData["format"], positions: number[], bounds: Bounds): MeshData {
+function makeMesh(name: string, positions: number[], bounds: Bounds): GeometryMesh {
   return {
-    format,
-    positions,
+    id: `${name}-mesh-0`,
+    name,
+    positions: new Float32Array(positions),
     vertexCount: positions.length / 3,
     triangleCount: positions.length / 9,
-    bounds,
-    boundsText: formatBounds(bounds)
+    bounds
   };
 }
 
-export function parseAsciiStl(text: string): MeshData {
+function makeDocument(name: string, format: GeometryFormat, mesh: GeometryMesh): GeometryDocument {
+  return {
+    id: `${name}-${format.toLowerCase()}`,
+    name,
+    format,
+    meshes: [mesh],
+    units: "unknown",
+    metadata: {}
+  };
+}
+
+function parseAsciiStl(name: string, text: string): GeometryDocument {
   const matches = [...text.matchAll(/vertex\s+([-\d+.eE]+)\s+([-\d+.eE]+)\s+([-\d+.eE]+)/g)];
   if (matches.length < 3) {
     throw new Error("ASCII STL 정점을 찾지 못했습니다.");
@@ -68,7 +59,7 @@ export function parseAsciiStl(text: string): MeshData {
     expandBounds(bounds, x, y, z);
   }
 
-  return makeMeshResult("STL", positions, bounds);
+  return makeDocument(name, "STL", makeMesh(name, positions, bounds));
 }
 
 function looksLikeBinaryStl(buffer: ArrayBuffer): boolean {
@@ -81,7 +72,7 @@ function looksLikeBinaryStl(buffer: ArrayBuffer): boolean {
   return 84 + triangleCount * 50 === buffer.byteLength;
 }
 
-function parseBinaryStl(buffer: ArrayBuffer): MeshData {
+function parseBinaryStl(name: string, buffer: ArrayBuffer): GeometryDocument {
   const view = new DataView(buffer);
 
   if (buffer.byteLength < 84) {
@@ -112,23 +103,22 @@ function parseBinaryStl(buffer: ArrayBuffer): MeshData {
     }
   }
 
-  return makeMeshResult("STL", positions, bounds);
+  return makeDocument(name, "STL", makeMesh(name, positions, bounds));
 }
 
-export function parseStl(input: string | ArrayBuffer): MeshData {
+function parseStl(name: string, input: string | ArrayBuffer): GeometryDocument {
   if (typeof input === "string") {
-    return parseAsciiStl(input);
+    return parseAsciiStl(name, input);
   }
 
   if (looksLikeBinaryStl(input)) {
-    return parseBinaryStl(input);
+    return parseBinaryStl(name, input);
   }
 
-  const text = new TextDecoder().decode(input);
-  return parseAsciiStl(text);
+  return parseAsciiStl(name, new TextDecoder().decode(input));
 }
 
-export function parseObj(text: string): MeshData {
+function parseObj(name: string, text: string): GeometryDocument {
   const lines = text.split(/\r?\n/);
   const sourceVertices: [number, number, number][] = [];
   const positions: number[] = [];
@@ -168,5 +158,18 @@ export function parseObj(text: string): MeshData {
     throw new Error("OBJ face 데이터를 찾지 못했습니다.");
   }
 
-  return makeMeshResult("OBJ", positions, bounds);
+  return makeDocument(name, "OBJ", makeMesh(name, positions, bounds));
+}
+
+export function loadGeometryDocument(name: string, content: string | ArrayBuffer): GeometryDocument {
+  const extension = name.split(".").pop()?.toLowerCase();
+
+  if (extension === "obj") {
+    if (typeof content !== "string") {
+      throw new Error("OBJ 파일은 텍스트로 읽어야 합니다.");
+    }
+    return parseObj(name, content);
+  }
+
+  return parseStl(name, content);
 }

@@ -8,7 +8,13 @@ export default defineConfig({
   root: path.resolve(__dirname),
   publicDir: path.resolve(__dirname, "public"),
   server: {
-    port: 3000
+    port: 3000,
+    proxy: {
+      "/api": {
+        target: "http://localhost:3001",
+        changeOrigin: true
+      }
+    }
   },
   preview: {
     port: 3000

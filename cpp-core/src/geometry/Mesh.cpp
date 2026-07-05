@@ -1,4 +1,4 @@
-#include "Mesh.h"
+#include "geometry/Mesh.h"
 
 void Mesh::addTriangle(const Triangle& triangle) {
     triangles_.push_back(triangle);

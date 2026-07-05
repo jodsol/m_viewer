@@ -1,6 +1,6 @@
-#include "BoundingBox.h"
+#include "core/math/AABB.h"
 
-void BoundingBox::expand(const Vector3& point) {
+void AABB::expand(const Vector3& point) {
     if (!initialized) {
         min = point;
         max = point;

@@ -4,8 +4,8 @@
 #include <cstddef>
 #include <vector>
 
-#include "BoundingBox.h"
-#include "Vector3.h"
+#include "core/math/AABB.h"
+#include "core/math/Vector3.h"
 
 struct Triangle {
     std::array<Vector3, 3> vertices;
