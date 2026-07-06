@@ -24,18 +24,11 @@
 cpp-core/
 ├── include/
 │   ├── core/
-│   │   ├── math/
-│   │   ├── ecs/
-│   │   ├── event/
-│   │   └── memory/
+│   │   └── math/
 │   ├── geometry/
 │   ├── io/
 │   ├── physics/
-│   │   ├── collision/
-│   │   ├── broadphase/
-│   │   ├── narrowphase/
-│   │   ├── raycast/
-│   │   └── rigidbody/
+│   │   └── raycast/
 │   ├── analysis/
 │   └── wasm/
 ├── src/
@@ -65,6 +58,12 @@ cpp-core/
 
 - `STLLoader`
 
+### `physics/raycast`
+
+- `Ray`
+- `RaycastHit`
+- `MeshRaycaster`
+
 ### `analysis`
 
 - `MeshAnalyzer`
@@ -74,48 +73,17 @@ cpp-core/
 
 - `WasmExports`
 
-## 향후 자연스럽게 추가될 위치
+## 현재 기능 개발 상태
 
-### `core/math`
+raycast의 첫 단계가 들어갔습니다.
 
-- `Matrix4`
-- `Ray`
-- `Frustum`
+- `MeshRaycaster`는 메시 전체 triangle을 순회하는 기본 raycast를 수행합니다.
+- 현재는 BVH 없는 선형 탐색입니다.
+- 다음 단계에서 inspect 기능을 이 raycast API에 연결할 수 있습니다.
 
-### `physics/raycast`
+## 다음 추천 작업
 
-- `RaycastHit`
-- `MeshRaycaster`
-
-### `physics/broadphase`
-
-- `BVH`
-- `AABBTree`
-
-### `physics/narrowphase`
-
-- triangle intersection
-- closest point query
-
-## web-viewer와의 관계
-
-현재 `web-viewer`는:
-
-- 파일 로드
-- Three.js 렌더링
-- UI
-- inspect / measure MVP
-
-를 담당합니다.
-
-장기적으로는:
-
-```text
-web-viewer
--> wasm bridge
--> cpp-core
--> raycast / analysis / geometry query
--> 결과를 UI에 반영
-```
-
-흐름으로 계산 책임이 점점 `cpp-core`로 내려가게 됩니다.
+- `MeshRaycaster` 테스트 추가
+- `Ray` 정규화 정책 정의
+- `RaycastHit`를 wasm/JS 친화적으로 내보내는 API 설계
+- 이후 inspect를 core 기반으로 전환

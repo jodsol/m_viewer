@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import type { GeometryDocument } from "../models/geometry";
 import { formatBounds, formatCenter, formatSize } from "../models/geometry";
 import { MeshInfoPanel } from "../panels/MeshInfoPanel";
-import type { MeasurementInfo, MeshInfo, PickInfo, ViewerInteractionMode } from "../types/viewer";
+import type { PickSource } from "../tools/PickQuery";
+import type { MeasurementInfo, MeshInfo, PickHit, ViewerInteractionMode } from "../types/viewer";
 import { MeshViewer } from "../viewer/MeshViewer";
 import { loadGeometryDocument } from "./parsers";
 
@@ -45,12 +46,25 @@ function makeMeshInfo(document: GeometryDocument, source: string): MeshInfo {
   };
 }
 
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary);
+}
+
+function textToBase64(text: string): string {
+  return arrayBufferToBase64(new TextEncoder().encode(text).buffer);
+}
+
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const viewerRef = useRef<MeshViewer | null>(null);
   const [status, setStatus] = useState("샘플 STL 또는 사용자 파일을 로드할 수 있습니다.");
   const [meshInfo, setMeshInfo] = useState<MeshInfo>(defaultInfo);
-  const [pickInfo, setPickInfo] = useState<PickInfo | null>(null);
+  const [pickHit, setPickHit] = useState<PickHit | null>(null);
   const [measurementInfo, setMeasurementInfo] = useState<MeasurementInfo | null>(null);
   const [wireframe, setWireframe] = useState(false);
   const [showBounds, setShowBounds] = useState(true);
@@ -64,7 +78,7 @@ export function App() {
 
     const viewer = new MeshViewer(canvasRef.current, {
       onStatusChange: setStatus,
-      onPickChange: setPickInfo,
+      onPickChange: setPickHit,
       onMeasurementChange: setMeasurementInfo
     });
 
@@ -95,13 +109,14 @@ export function App() {
     viewerRef.current?.setInteractionMode(interactionMode);
   }, [interactionMode]);
 
-  function updateViewer(document: GeometryDocument): void {
+  function updateViewer(document: GeometryDocument, pickSource: PickSource | null): void {
     viewerRef.current?.loadDocument(document);
     viewerRef.current?.setBoundsVisible(showBounds);
     viewerRef.current?.setInteractionMode(interactionMode);
+    viewerRef.current?.setPickSource(pickSource);
 
     setMeshInfo(makeMeshInfo(document, document.format === "OBJ" ? "TypeScript" : "TypeScript + cpp-core"));
-    setPickInfo(null);
+    setPickHit(null);
     setMeasurementInfo(null);
   }
 
@@ -120,7 +135,7 @@ export function App() {
       });
 
       if (!response.ok) {
-        throw new Error("cpp-core 분석 요청에 실패했습니다.");
+        throw new Error("cpp-core 분석 요청이 실패했습니다.");
       }
 
       const analysis = (await response.json()) as {
@@ -141,7 +156,7 @@ export function App() {
         boundsText: `(${analysis.bounds.min.x.toFixed(2)}, ${analysis.bounds.min.y.toFixed(2)}, ${analysis.bounds.min.z.toFixed(2)}) ~ (${analysis.bounds.max.x.toFixed(2)}, ${analysis.bounds.max.y.toFixed(2)}, ${analysis.bounds.max.z.toFixed(2)})`,
         source: "cpp-core"
       }));
-      setStatus("STL 메시를 렌더링했고 cpp-core 분석도 완료했습니다.");
+      setStatus("STL 메시를 로드했고 cpp-core 분석까지 완료했습니다.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "cpp-core 분석에 실패했습니다.");
     }
@@ -156,12 +171,15 @@ export function App() {
     try {
       if (file.name.toLowerCase().endsWith(".obj")) {
         const text = await file.text();
-        updateViewer(loadGeometryDocument(file.name, text));
+        updateViewer(loadGeometryDocument(file.name, text), { format: "OBJ" });
         return;
       }
 
       const buffer = await file.arrayBuffer();
-      updateViewer(loadGeometryDocument(file.name, buffer));
+      updateViewer(loadGeometryDocument(file.name, buffer), {
+        format: "STL",
+        payloadBase64: arrayBufferToBase64(buffer)
+      });
       await analyzeWithCppCore(file);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "파일을 읽지 못했습니다.");
@@ -172,7 +190,10 @@ export function App() {
     try {
       const response = await fetch("/samples/cube_ascii.stl");
       const text = await response.text();
-      updateViewer(loadGeometryDocument("cube_ascii.stl", text));
+      updateViewer(loadGeometryDocument("cube_ascii.stl", text), {
+        format: "STL",
+        payloadBase64: textToBase64(text)
+      });
     } catch {
       setStatus("샘플 STL을 불러오지 못했습니다.");
     }
@@ -242,7 +263,7 @@ export function App() {
 
         <MeshInfoPanel
           meshInfo={meshInfo}
-          pickInfo={pickInfo}
+          pickHit={pickHit}
           measurementInfo={measurementInfo}
           interactionMode={interactionMode}
         />

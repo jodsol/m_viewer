@@ -18,3 +18,7 @@ std::size_t Mesh::vertexCount() const {
 const BoundingBox& Mesh::bounds() const {
     return bounds_;
 }
+
+const std::vector<Triangle>& Mesh::triangles() const {
+    return triangles_;
+}

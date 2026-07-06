@@ -1,11 +1,12 @@
 import type * as THREE from "three";
 
+import type { PickSource } from "../tools/PickQuery";
 import { PickingTool } from "../tools/PickingTool";
 import type { ModeController } from "./ModeController";
 
 export class InspectModeController implements ModeController {
   readonly id = "inspect" as const;
-  readonly statusMessage = "선택 모드입니다. 메시를 클릭해 좌표를 확인하세요.";
+  readonly statusMessage = "Inspect 모드입니다. 메시를 클릭해 좌표를 확인하세요.";
 
   constructor(private readonly pickingTool: PickingTool) {}
 
@@ -19,6 +20,10 @@ export class InspectModeController implements ModeController {
 
   setMesh(mesh: THREE.Mesh<THREE.BufferGeometry, THREE.Material | THREE.Material[]> | null): void {
     this.pickingTool.setMesh(mesh);
+  }
+
+  setPickSource(source: PickSource | null): void {
+    this.pickingTool.setSource(source);
   }
 
   dispose(): void {

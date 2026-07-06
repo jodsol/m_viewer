@@ -17,6 +17,7 @@ public:
     std::size_t triangleCount() const;
     std::size_t vertexCount() const;
     const BoundingBox& bounds() const;
+    const std::vector<Triangle>& triangles() const;
 
 private:
     std::vector<Triangle> triangles_;

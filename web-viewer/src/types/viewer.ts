@@ -19,6 +19,12 @@ export interface PickInfo {
   z: number;
 }
 
+export interface PickHit {
+  position: PickInfo;
+  triangleIndex: number;
+  distance: number;
+}
+
 export interface MeasurementInfo {
   start: PickInfo;
   end: PickInfo;

@@ -1,20 +1,20 @@
 import * as THREE from "three";
 
 import type { MeasurementInfo } from "../types/viewer";
+import type { PickQuery, PickSource, SceneRay } from "./PickQuery";
 
 export class MeasurementTool {
   private readonly camera: THREE.PerspectiveCamera;
   private readonly canvas: HTMLCanvasElement;
   private readonly scene: THREE.Scene;
   private readonly onMeasurementChange: (measurementInfo: MeasurementInfo | null) => void;
-  private readonly raycaster = new THREE.Raycaster();
   private readonly pointer = new THREE.Vector2();
   private readonly startMarker: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
   private readonly endMarker: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
   private readonly line: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   private readonly handlePointerDownBound: (event: PointerEvent) => void;
+  private readonly pickQuery: PickQuery;
 
-  private mesh: THREE.Mesh<THREE.BufferGeometry, THREE.Material | THREE.Material[]> | null = null;
   private enabled = false;
   private startPoint: THREE.Vector3 | null = null;
 
@@ -22,11 +22,13 @@ export class MeasurementTool {
     camera: THREE.PerspectiveCamera;
     canvas: HTMLCanvasElement;
     scene: THREE.Scene;
+    pickQuery: PickQuery;
     onMeasurementChange: (measurementInfo: MeasurementInfo | null) => void;
   }) {
     this.camera = options.camera;
     this.canvas = options.canvas;
     this.scene = options.scene;
+    this.pickQuery = options.pickQuery;
     this.onMeasurementChange = options.onMeasurementChange;
 
     this.startMarker = new THREE.Mesh(
@@ -50,7 +52,9 @@ export class MeasurementTool {
     this.line.visible = false;
     this.scene.add(this.line);
 
-    this.handlePointerDownBound = (event: PointerEvent) => this.handlePointerDown(event);
+    this.handlePointerDownBound = (event: PointerEvent) => {
+      void this.handlePointerDown(event);
+    };
     this.canvas.addEventListener("pointerdown", this.handlePointerDownBound);
   }
 
@@ -62,8 +66,12 @@ export class MeasurementTool {
   }
 
   setMesh(mesh: THREE.Mesh<THREE.BufferGeometry, THREE.Material | THREE.Material[]> | null): void {
-    this.mesh = mesh;
+    this.pickQuery.setMesh(mesh);
     this.clearMeasurement();
+  }
+
+  setSource(source: PickSource | null): void {
+    this.pickQuery.setSource(source);
   }
 
   clearMeasurement(): void {
@@ -74,23 +82,36 @@ export class MeasurementTool {
     this.onMeasurementChange(null);
   }
 
-  private handlePointerDown(event: PointerEvent): void {
-    if (!this.enabled || !this.mesh) {
-      return;
-    }
-
+  private makeSceneRay(event: PointerEvent): SceneRay {
     const rect = this.canvas.getBoundingClientRect();
     this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-    this.raycaster.setFromCamera(this.pointer, this.camera);
-    const intersections = this.raycaster.intersectObject(this.mesh, false);
+    const origin = new THREE.Vector3();
+    const direction = new THREE.Vector3(this.pointer.x, this.pointer.y, 0.5)
+      .unproject(this.camera)
+      .sub(this.camera.position)
+      .normalize();
 
-    if (intersections.length === 0) {
+    origin.copy(this.camera.position);
+
+    return {
+      origin: { x: origin.x, y: origin.y, z: origin.z },
+      direction: { x: direction.x, y: direction.y, z: direction.z }
+    };
+  }
+
+  private async handlePointerDown(event: PointerEvent): Promise<void> {
+    if (!this.enabled) {
       return;
     }
 
-    const point = intersections[0].point.clone();
+    const pickedHit = await this.pickQuery.pick(this.makeSceneRay(event));
+    if (!this.enabled || !pickedHit) {
+      return;
+    }
+
+    const point = new THREE.Vector3(pickedHit.position.x, pickedHit.position.y, pickedHit.position.z);
 
     if (!this.startPoint) {
       this.startPoint = point;

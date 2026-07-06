@@ -4,7 +4,8 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import type { GeometryDocument } from "../models/geometry";
 import { createDefaultModeControllers } from "../modes/createDefaultModeControllers";
 import type { ModeController } from "../modes/ModeController";
-import type { MeasurementInfo, PickInfo, ViewerInteractionMode } from "../types/viewer";
+import type { PickSource } from "../tools/PickQuery";
+import type { MeasurementInfo, PickHit, ViewerInteractionMode } from "../types/viewer";
 
 export class MeshViewer {
   private readonly canvas: HTMLCanvasElement;
@@ -28,7 +29,7 @@ export class MeshViewer {
     canvas: HTMLCanvasElement,
     callbacks: {
       onStatusChange?: (message: string) => void;
-      onPickChange?: (pickInfo: PickInfo | null) => void;
+      onPickChange?: (pickHit: PickHit | null) => void;
       onMeasurementChange?: (measurementInfo: MeasurementInfo | null) => void;
     } = {}
   ) {
@@ -130,6 +131,12 @@ export class MeshViewer {
     }
   }
 
+  setPickSource(source: PickSource | null): void {
+    for (const controller of this.modeControllers.values()) {
+      controller.setPickSource?.(source);
+    }
+  }
+
   setInteractionMode(mode: ViewerInteractionMode): void {
     this.interactionMode = mode;
     this.activateMode(mode, true);
@@ -160,7 +167,7 @@ export class MeshViewer {
   loadDocument(document: GeometryDocument): void {
     const primaryMesh = document.meshes[0];
     if (!primaryMesh) {
-      throw new Error("렌더링할 메시가 없습니다.");
+      throw new Error("로드할 메시가 없습니다.");
     }
 
     if (this.mesh) {
@@ -202,7 +209,7 @@ export class MeshViewer {
     this.controls.update();
     this.handleResize();
     this.activateMode(this.interactionMode, false);
-    this.onStatusChange(`${document.format} 메시를 렌더링했습니다.`);
+    this.onStatusChange(`${document.format} 메시를 로드했습니다.`);
   }
 
   private animate(): void {

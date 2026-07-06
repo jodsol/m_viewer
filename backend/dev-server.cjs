@@ -18,6 +18,7 @@ function ensureCppCoreBuilt() {
       "-Icpp-core/include",
       "cpp-core/src/core/math/AABB.cpp",
       "cpp-core/src/geometry/Mesh.cpp",
+      "cpp-core/src/physics/raycast/MeshRaycaster.cpp",
       "cpp-core/src/analysis/MeshAnalyzer.cpp",
       "cpp-core/src/io/STLLoader.cpp",
       "cpp-core/src/wasm/WasmExports.cpp",
@@ -84,6 +85,51 @@ function runCppAnalysis(filePath) {
   });
 }
 
+function runCppRaycast(filePath, ray) {
+  return new Promise((resolve, reject) => {
+    const args = [
+      "raycast",
+      filePath,
+      String(ray.origin.x),
+      String(ray.origin.y),
+      String(ray.origin.z),
+      String(ray.direction.x),
+      String(ray.direction.y),
+      String(ray.direction.z)
+    ];
+
+    const child = spawn(cppExe, args, {
+      cwd: root,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(stderr.trim() || `cpp-core raycast exited with code ${code}`));
+        return;
+      }
+
+      try {
+        resolve(JSON.parse(stdout));
+      } catch {
+        reject(new Error(`Failed to parse cpp-core raycast output: ${stdout}`));
+      }
+    });
+  });
+}
+
 const server = http.createServer(async (req, res) => {
   if (req.method === "POST" && req.url === "/api/analyze-stl") {
     try {
@@ -98,6 +144,33 @@ const server = http.createServer(async (req, res) => {
 
       try {
         const result = await runCppAnalysis(tempFilePath);
+        sendJson(res, 200, result);
+      } finally {
+        fs.promises.unlink(tempFilePath).catch(() => {});
+      }
+    } catch (error) {
+      sendJson(res, 500, { error: error instanceof Error ? error.message : "Unknown backend error." });
+    }
+
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/api/raycast-stl") {
+    try {
+      const body = await collectBody(req);
+      const payload = JSON.parse(body.toString("utf8"));
+
+      if (!payload?.stlBase64 || !payload?.ray) {
+        sendJson(res, 400, { error: "stlBase64 and ray are required." });
+        return;
+      }
+
+      const stlBuffer = Buffer.from(payload.stlBase64, "base64");
+      const tempFilePath = path.join(os.tmpdir(), `stl-viewer-ray-${Date.now()}-${process.pid}.stl`);
+      await fs.promises.writeFile(tempFilePath, stlBuffer);
+
+      try {
+        const result = await runCppRaycast(tempFilePath, payload.ray);
         sendJson(res, 200, result);
       } finally {
         fs.promises.unlink(tempFilePath).catch(() => {});

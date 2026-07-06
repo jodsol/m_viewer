@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_executable(mesh_info_cli
     src/core/math/AABB.cpp
     src/geometry/Mesh.cpp
+    src/physics/raycast/MeshRaycaster.cpp
     src/analysis/MeshAnalyzer.cpp
     src/io/STLLoader.cpp
     src/wasm/WasmExports.cpp
@@ -14,3 +15,12 @@ add_executable(mesh_info_cli
 )
 
 target_include_directories(mesh_info_cli PRIVATE include)
+
+add_executable(raycast_smoke
+    src/core/math/AABB.cpp
+    src/geometry/Mesh.cpp
+    src/physics/raycast/MeshRaycaster.cpp
+    tests/raycast_smoke.cpp
+)
+
+target_include_directories(raycast_smoke PRIVATE include)
